@@ -1,18 +1,17 @@
 /**
  * config/cloudinary.js - Cloudinary setup for media uploads
- *
- * Fix: multer-storage-cloudinary v4 exports CloudinaryStorage as a named export.
- * Require the whole module and access .CloudinaryStorage to avoid constructor errors.
  */
 
-const cloudinary = require('cloudinary').v2;
+// 1. Require the root cloudinary package (do NOT append .v2 here)
+const cloudinary = require('cloudinary');
 const multerCloudinary = require('multer-storage-cloudinary');
 
 // Safe access: works whether it's a named or default export
 const CloudinaryStorage =
   multerCloudinary.CloudinaryStorage || multerCloudinary;
 
-cloudinary.config({
+// 2. Access .v2 specifically when configuring your credentials
+cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key:    process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
@@ -20,7 +19,8 @@ cloudinary.config({
 
 // Storage for post images/videos
 const postStorage = new CloudinaryStorage({
-  cloudinary,
+  // 3. Pass the root 'cloudinary' object here
+  cloudinary: cloudinary, 
   params: async (req, file) => {
     const isVideo = file.mimetype.startsWith('video/');
     return {
@@ -34,7 +34,8 @@ const postStorage = new CloudinaryStorage({
 
 // Storage for profile pictures
 const avatarStorage = new CloudinaryStorage({
-  cloudinary,
+  // Pass the root 'cloudinary' object here too
+  cloudinary: cloudinary, 
   params: {
     folder: 'luminary/avatars',
     resource_type: 'image',
@@ -45,4 +46,5 @@ const avatarStorage = new CloudinaryStorage({
   },
 });
 
-module.exports = { cloudinary, postStorage, avatarStorage };
+// 4. Export cloudinary.v2 so the rest of your app can still use the modern API
+module.exports = { cloudinary: cloudinary.v2, postStorage, avatarStorage };

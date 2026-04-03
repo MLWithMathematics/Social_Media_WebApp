@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * app/providers.jsx - Client-only wrapper for context providers
- * ThemeProvider and Toaster both use createContext internally,
- * so they must live in a Client Component.
+ * app/providers.jsx
+ * suppressHydrationWarning on the wrapper div silences the next-themes
+ * inline script-tag warning in React 18 App Router.
  */
 
 import { ThemeProvider } from 'next-themes';
@@ -17,19 +17,25 @@ export default function Providers({ children }) {
       enableSystem={false}
       disableTransitionOnChange={false}
     >
-      {children}
-      <Toaster
-        position="bottom-center"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            fontFamily: 'var(--font-lato)',
-            fontSize: '14px',
-            borderRadius: '12px',
-            padding: '12px 16px',
-          },
-        }}
-      />
+      <div suppressHydrationWarning>
+        {children}
+        <Toaster
+          position="bottom-center"
+          toastOptions={{
+            duration: 3000,
+            style: {
+              fontFamily: 'var(--font-lato)',
+              fontSize: '14px',
+              borderRadius: '16px',
+              padding: '12px 18px',
+              background: 'var(--bg-secondary)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border)',
+              boxShadow: '0 8px 32px rgba(99,102,241,0.15)',
+            },
+          }}
+        />
+      </div>
     </ThemeProvider>
   );
 }

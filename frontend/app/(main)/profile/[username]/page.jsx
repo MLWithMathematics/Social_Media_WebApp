@@ -1,186 +1,208 @@
 /**
- * app/(main)/profile/[username]/page.jsx - User profile with posts grid
+ * app/(main)/settings/profile/page.jsx - Edit profile form
  */
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { RiLinkM, RiMapPinLine, RiSettings3Line, RiGridLine, RiBookmarkLine } from 'react-icons/ri';
-import { userService } from '@/services/userService';
-import { postService } from '@/services/postService';
+import { motion } from 'framer-motion';
+import { RiCameraLine, RiLoader4Line, RiArrowLeftLine, RiLinkM, RiUser3Line } from 'react-icons/ri';
 import useAuthStore from '@/store/authStore';
+import { userService } from '@/services/userService';
 import Avatar from '@/components/ui/Avatar';
-import FollowButton from '@/components/ui/FollowButton';
-import { ProfileSkeleton } from '@/components/ui/Skeleton';
-import PostCard from '@/components/post/PostCard';
 import toast from 'react-hot-toast';
 
-function StatPill({ label, value, onClick }) {
-  return (
-    <button onClick={onClick} className="flex flex-col items-center gap-0.5 transition-opacity hover:opacity-70">
-      <span className="text-xl font-bold font-display" style={{ color: 'var(--text-primary)' }}>{value ?? 0}</span>
-      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}</span>
-    </button>
-  );
-}
+export default function EditProfilePage() {
+  const router = useRouter();
+  const { user, updateUser } = useAuthStore();
+  const fileRef = useRef(null);
 
-export default function ProfilePage() {
-  const { username } = useParams();
-  const { user: currentUser } = useAuthStore();
-  const [profile, setProfile] = useState(null);
-  const [posts, setPosts] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [postsLoading, setPostsLoading] = useState(true);
-  const [tab, setTab] = useState('posts'); // 'posts' | 'bookmarks'
-  const [bookmarks, setBookmarks] = useState([]);
-
-  const isOwnProfile = currentUser?.username === username;
+  const [form, setForm] = useState({
+    name: '',
+    bio: '',
+    website: '',
+  });
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    setIsLoading(true);
-    setPostsLoading(true);
-    userService.getProfile(username)
-      .then((res) => { setProfile(res.data.user); setIsLoading(false); })
-      .catch(() => { setIsLoading(false); toast.error('Profile not found'); });
+    if (user) {
+      setForm({
+        name: user.name || '',
+        bio: user.bio || '',
+        website: user.website || '',
+      });
+    }
+  }, [user]);
 
-    userService.getUserPosts(username)
-      .then((res) => { setPosts(res.data.posts || []); setPostsLoading(false); })
-      .catch(() => setPostsLoading(false));
-  }, [username]);
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
 
-  const loadBookmarks = useCallback(async () => {
-    if (!isOwnProfile) return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    const formData = new FormData();
+    formData.append('name', form.name);
+    formData.append('bio', form.bio);
+    formData.append('website', form.website);
+    if (avatarFile) formData.append('avatar', avatarFile);
+
     try {
-      const res = await postService.getBookmarks();
-      setBookmarks(res.data.posts || []);
-    } catch {}
-  }, [isOwnProfile]);
+      const res = await userService.updateProfile(formData);
+      updateUser(res.data.user);
+      toast.success('Profile updated!');
+      router.push(`/profile/${user.username}`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update profile');
+    }
+    setIsSubmitting(false);
+  };
 
-  useEffect(() => {
-    if (tab === 'bookmarks') loadBookmarks();
-  }, [tab, loadBookmarks]);
-
-  if (isLoading) return <ProfileSkeleton />;
-  if (!profile) return <div className="text-center py-20" style={{ color: 'var(--text-muted)' }}>User not found</div>;
-
-  const displayPosts = tab === 'bookmarks' ? bookmarks : posts;
+  if (!user) return null;
 
   return (
-    <div>
-      {/* ── Profile Header ── */}
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-6">
-          <Avatar
-            src={profile.avatar?.url}
-            name={profile.name || profile.username}
-            size="2xl"
-            ring
+    <div className="max-w-lg mx-auto">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-8">
+        <button
+          onClick={() => router.back()}
+          className="btn-ghost p-2 rounded-xl"
+        >
+          <RiArrowLeftLine className="text-xl" />
+        </button>
+        <h1 className="font-display text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+          Edit Profile
+        </h1>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+        {/* Avatar upload */}
+        <div className="flex flex-col items-center gap-3">
+          <div className="relative group">
+            {avatarPreview ? (
+              <div className="relative w-24 h-24 rounded-full overflow-hidden ring-4"
+                style={{ ringColor: 'var(--accent)' }}>
+                <Image src={avatarPreview} alt="Preview" fill className="object-cover" sizes="96px" />
+              </div>
+            ) : (
+              <Avatar src={user.avatar?.url} name={user.name || user.username} size="xl" ring />
+            )}
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="absolute inset-0 rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+              style={{ backgroundColor: 'rgba(99,102,241,0.65)' }}
+            >
+              <RiCameraLine className="text-white text-2xl" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="text-sm font-bold"
+            style={{ color: 'var(--accent)' }}
+          >
+            Change photo
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleAvatarChange}
           />
+        </div>
 
-          <div className="flex-1 text-center sm:text-left">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 mb-3">
-              <div>
-                <h1 className="font-display text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                  {profile.name || profile.username}
-                </h1>
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>@{profile.username}</p>
-              </div>
-              <div className="flex gap-2 sm:ml-auto">
-                {isOwnProfile ? (
-                  <Link href="/settings/profile" className="btn-outline text-sm">
-                    <RiSettings3Line /> Edit Profile
-                  </Link>
-                ) : (
-                  <FollowButton
-                    userId={profile._id}
-                    initialFollowing={profile.isFollowing}
-                    onToggle={(following) =>
-                      setProfile((p) => ({
-                        ...p,
-                        isFollowing: following,
-                        followersCount: following ? p.followersCount + 1 : p.followersCount - 1,
-                      }))
-                    }
-                  />
-                )}
-              </div>
+        {/* Form fields */}
+        <div className="card p-6 flex flex-col gap-5">
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-bold mb-1.5 uppercase tracking-wider"
+              style={{ color: 'var(--text-muted)' }}>
+              Display Name
+            </label>
+            <div className="relative">
+              <RiUser3Line className="absolute left-4 top-1/2 -translate-y-1/2"
+                style={{ color: 'var(--text-muted)' }} />
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Your display name"
+                maxLength={60}
+                className="input pl-10"
+              />
             </div>
+          </div>
 
-            {/* Stats */}
-            <div className="flex justify-center sm:justify-start gap-6 mb-3">
-              <StatPill label="Posts" value={profile.postsCount} />
-              <StatPill label="Followers" value={profile.followersCount} />
-              <StatPill label="Following" value={profile.followingCount} />
+          {/* Bio */}
+          <div>
+            <label className="block text-xs font-bold mb-1.5 uppercase tracking-wider"
+              style={{ color: 'var(--text-muted)' }}>
+              Bio
+            </label>
+            <textarea
+              value={form.bio}
+              onChange={(e) => setForm({ ...form, bio: e.target.value })}
+              placeholder="Tell people about yourself…"
+              rows={3}
+              maxLength={200}
+              className="input resize-none"
+            />
+            <p className="text-xs mt-1 text-right" style={{ color: 'var(--text-muted)' }}>
+              {200 - form.bio.length} characters left
+            </p>
+          </div>
+
+          {/* Website */}
+          <div>
+            <label className="block text-xs font-bold mb-1.5 uppercase tracking-wider"
+              style={{ color: 'var(--text-muted)' }}>
+              Website
+            </label>
+            <div className="relative">
+              <RiLinkM className="absolute left-4 top-1/2 -translate-y-1/2"
+                style={{ color: 'var(--text-muted)' }} />
+              <input
+                value={form.website}
+                onChange={(e) => setForm({ ...form, website: e.target.value })}
+                placeholder="https://yoursite.com"
+                maxLength={100}
+                className="input pl-10"
+              />
             </div>
-
-            {/* Bio */}
-            {profile.bio && (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-secondary)' }}>
-                {profile.bio}
-              </p>
-            )}
-            {profile.website && (
-              <a href={profile.website} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1 text-sm mt-1 w-fit"
-                style={{ color: 'var(--accent)' }}>
-                <RiLinkM /> {profile.website.replace(/^https?:\/\//, '')}
-              </a>
-            )}
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b" style={{ borderColor: 'var(--border)' }}>
-          {[
-            { key: 'posts',     Icon: RiGridLine,     label: 'Posts' },
-            ...(isOwnProfile ? [{ key: 'bookmarks', Icon: RiBookmarkLine, label: 'Saved' }] : []),
-          ].map(({ key, Icon, label }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className="flex items-center gap-2 px-4 py-3 text-sm font-bold transition-colors relative"
-              style={{ color: tab === key ? 'var(--accent)' : 'var(--text-muted)' }}
-            >
-              <Icon />
-              {label}
-              {tab === key && (
-                <motion.div layoutId="profile-tab-indicator"
-                  className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                  style={{ backgroundColor: 'var(--accent)' }}
-                />
-              )}
-            </button>
-          ))}
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="btn-outline flex-1"
+          >
+            Cancel
+          </button>
+          <motion.button
+            type="submit"
+            disabled={isSubmitting}
+            whileTap={{ scale: 0.97 }}
+            className="btn-primary flex-1"
+          >
+            {isSubmitting
+              ? <RiLoader4Line className="animate-spin text-lg" />
+              : 'Save Changes'
+            }
+          </motion.button>
         </div>
-      </motion.div>
-
-      {/* ── Posts Grid / List ── */}
-      {postsLoading ? (
-        <div className="grid grid-cols-3 gap-1">
-          {[...Array(9)].map((_, i) => (
-            <div key={i} className="skeleton aspect-square rounded-lg" />
-          ))}
-        </div>
-      ) : displayPosts.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="text-4xl mb-3">{tab === 'bookmarks' ? '🔖' : '📷'}</div>
-          <p style={{ color: 'var(--text-muted)' }}>
-            {tab === 'bookmarks' ? 'No bookmarks yet' : 'No posts yet'}
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <AnimatePresence>
-            {displayPosts.map((post) => (
-              <PostCard key={post._id} post={post} />
-            ))}
-          </AnimatePresence>
-        </div>
-      )}
+      </form>
     </div>
   );
 }

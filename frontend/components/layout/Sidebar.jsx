@@ -1,5 +1,7 @@
 /**
- * components/layout/Sidebar.jsx - Desktop sidebar with nav, dark mode, user info
+ * components/layout/Sidebar.jsx
+ * Fix: `mounted` state prevents server/client theme mismatch (Error 2).
+ * The theme icon/label only renders after client hydration.
  */
 
 'use client';
@@ -22,7 +24,7 @@ import useAuthStore from '@/store/authStore';
 import useNotificationStore from '@/store/notificationStore';
 import Avatar from '@/components/ui/Avatar';
 import CreatePostModal from '@/components/post/CreatePostModal';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const NAV_ITEMS = [
   { href: '/feed',          label: 'Home',          Icon: RiHome5Line,    IconActive: RiHome5Fill },
@@ -40,75 +42,95 @@ export default function Sidebar() {
   const { unreadCount } = useNotificationStore();
   const [showCreate, setShowCreate] = useState(false);
 
+  // Prevent hydration mismatch — theme is unknown until client mounts
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const handleLogout = async () => {
     await logout();
     router.push('/login');
   };
 
+  const isDark = mounted && theme === 'dark';
+
   return (
     <>
-      <div className="flex flex-col h-full px-4 py-6 gap-1">
+      <div className="flex flex-col h-full px-3 py-6 gap-1">
         {/* Logo */}
-        <Link href="/feed" className="flex items-center gap-2 px-2 mb-8">
-          <span className="font-display text-2xl font-bold text-gradient tracking-tight">
+        <Link href="/feed" className="flex items-center gap-2 px-3 mb-8">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))' }}>
+            <span className="text-white font-bold text-sm">L</span>
+          </div>
+          <span className="font-display text-xl font-bold text-gradient tracking-tight">
             Luminary
           </span>
         </Link>
 
         {/* Nav links */}
-        <nav className="flex flex-col gap-1 flex-1">
+        <nav className="flex flex-col gap-0.5 flex-1">
           {NAV_ITEMS.map(({ href, label, Icon, IconActive }) => {
-            const isActive = pathname === href;
+            const isActive = pathname === href || pathname.startsWith(href + '/');
             const isNotif = href === '/notifications';
             return (
-              <Link
-                key={href}
-                href={href}
-                className={`nav-link ${isActive ? 'active' : ''}`}
-              >
+              <Link key={href} href={href} className={`nav-link ${isActive ? 'active' : ''}`}>
                 <span className="relative text-xl flex-shrink-0">
                   {isActive ? <IconActive /> : <Icon />}
                   {isNotif && unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] font-bold text-white flex items-center justify-center"
-                      style={{ backgroundColor: 'var(--accent)' }}>
+                    <span
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] font-bold text-white flex items-center justify-center"
+                      style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))' }}
+                    >
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   )}
                 </span>
-                <span>{label}</span>
+                <span className="font-medium">{label}</span>
               </Link>
             );
           })}
 
-          {/* Create post button */}
-          <button
+          {/* Create post */}
+          <motion.button
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.97 }}
             onClick={() => setShowCreate(true)}
-            className="nav-link mt-2 w-full text-left"
-            style={{ color: 'var(--accent)' }}
+            className="flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold mt-3 transition-all w-full text-white"
+            style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 2px 12px rgba(99,102,241,0.3)' }}
           >
             <RiAddCircleLine className="text-xl flex-shrink-0" />
-            <span className="font-bold">New Post</span>
-          </button>
+            <span>New Post</span>
+          </motion.button>
         </nav>
 
-        {/* Bottom: theme + profile + logout */}
-        <div className="flex flex-col gap-2 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
-          {/* Dark mode toggle */}
+        {/* Bottom section */}
+        <div className="flex flex-col gap-1 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+          {/* Theme toggle — only render after mount to prevent hydration mismatch */}
           <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            onClick={() => mounted && setTheme(isDark ? 'light' : 'dark')}
             className="nav-link"
+            suppressHydrationWarning
           >
-            {theme === 'dark'
-              ? <RiSunLine className="text-xl" />
-              : <RiMoonLine className="text-xl" />}
-            <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+            {/* Always render a consistent icon server-side; swap after mount */}
+            {mounted
+              ? isDark
+                ? <RiSunLine className="text-xl" />
+                : <RiMoonLine className="text-xl" />
+              : <RiMoonLine className="text-xl" />
+            }
+            <span suppressHydrationWarning>
+              {mounted ? (isDark ? 'Light Mode' : 'Dark Mode') : 'Dark Mode'}
+            </span>
           </button>
 
-          {/* Profile */}
+          {/* Profile card */}
           {user && (
             <Link
               href={`/profile/${user.username}`}
-              className="flex items-center gap-3 px-2 py-2 rounded-xl transition-all hover:bg-[var(--bg-tertiary)]"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all"
+              style={{ ':hover': { backgroundColor: 'var(--bg-tertiary)' } }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
             >
               <Avatar src={user.avatar?.url} name={user.name || user.username} size="sm" />
               <div className="flex-1 min-w-0">
